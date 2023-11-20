@@ -1,25 +1,46 @@
-import logo from './logo.svg';
-import './App.css';
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import Login from './components/Login';
+import Signup from './components/Signup';
+import MainDashboard from '../src/pages/MainDashboard';
 
-function App() {
+const App = () => {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [username, setUsername] = useState('');
+
+  const onLogin = (username) => {
+    setIsLoggedIn(true);
+    setUsername(username);
+  };
+
+  const onSignup = (username) => {
+    setIsLoggedIn(true); // Set user as logged in after signup
+    setUsername(username);
+  };
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <Routes>
+        <Route 
+          path="/login" 
+          element={isLoggedIn ? <Navigate to="/dashboard" /> : <Login onLogin={onLogin} />} 
+        />
+        <Route 
+          path="/signup" 
+          element={isLoggedIn ? <Navigate to="/dashboard" /> : <Signup onSignup={onSignup} />} 
+        />
+        <Route 
+          path="/dashboard" 
+          element={isLoggedIn ? <MainDashboard username={username} /> : <Navigate to="/login" />} 
+        />
+        {/* Redirect from root to either login, signup, or dashboard */}
+        <Route 
+          path="/" 
+          element={<Navigate to={isLoggedIn ? "/dashboard" : "/login"} />} 
+        />
+      </Routes>
+    </Router>
   );
-}
+};
 
 export default App;
