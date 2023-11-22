@@ -82,16 +82,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // When a user sends a message to the chat room
-    // socket.on('send message', (messageText) => {
-    //     const chatRoomId = chatRooms[currentUser];
-    //     if (chatRoomId) {
-    //         const message = { text: messageText, fromUsername: currentUser };
-    //         io.to(chatRoomId).emit('receive message', message);
-    //         console.log(`Message from ${currentUser} in room ${chatRoomId}: ${message.text}`);
-    //     }
-    // });
-
     socket.on('send message', (messageText) => {
         const chatRoomId = chatRooms[currentUser];
         if (chatRoomId) {

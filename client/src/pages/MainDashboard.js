@@ -1,12 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
+import CryptoJS from 'crypto-js';
 import './MainDashboard.css';
+
 
 const MainDashboard = ({ username }) => {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
   const [otherUsername, setOtherUsername] = useState('');
+
   const socketRef = useRef();
+
+  const secretKey = 'your-secret-key';
+  const encryptMessage = (message) => {
+    return CryptoJS.AES.encrypt(message, secretKey).toString();
+  };
+  
+  const decryptMessage = (encryptedMessage) => {
+    const bytes = CryptoJS.AES.decrypt(encryptedMessage, secretKey);
+    return bytes.toString(CryptoJS.enc.Utf8);
+  };
+  
+
 
   useEffect(() => {
     socketRef.current = io.connect('http://localhost:5000');
@@ -15,10 +30,12 @@ const MainDashboard = ({ username }) => {
     socketRef.current.emit('login', username);
 
     socketRef.current.on('receive message', (message) => {
-      console.log('Received message:', message);
-      setMessages((prevMessages) => [...prevMessages, message]);
-    });
-
+      console.log('Message received:', message);
+      const decryptedMessage = decryptMessage(message.text);
+      console.log('Decrypted message:', decryptedMessage);
+      setMessages((oldMessages) => [...oldMessages, { ...message, text: decryptedMessage }]);
+    }
+    );
 
     return () => {
       socketRef.current.disconnect();
@@ -28,16 +45,21 @@ const MainDashboard = ({ username }) => {
   const startChat = () => {
     console.log('Start chat with:', otherUsername);
     socketRef.current.emit('request chat', otherUsername);
-    
+    setMessages([]); // Clear the messages state
+    setOtherUsername('');
   };
+  
 
-  const sendMessage = () => {
-    if (message.trim()) {
-      console.log('Sending message:', message);
-      socketRef.current.emit('send message', message);
-      setMessage('');
-    }
-  };
+
+const sendMessage = () => {
+  if (message.trim()) {
+    console.log('Sending message:', message);
+    const encryptedMessage = encryptMessage(message);
+    socketRef.current.emit('send message', encryptedMessage);
+    setMessage('');
+  }
+};
+  
 
   const messagesEndRef = useRef(null);
 
@@ -74,9 +96,7 @@ const MainDashboard = ({ username }) => {
           <div
             key={index}
             className={`message ${
-              msg.fromUsername === username
-                ? 'my-message'
-                : 'other-message'
+              msg.fromUsername === username ? 'my-message' : 'other-message'
             }`}
           >
             <div className="message-content">
