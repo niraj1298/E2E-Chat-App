@@ -1,26 +1,42 @@
 const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
-const crypto = require('crypto'); 
+const crypto = require('crypto');
 const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIO(server);
+const io = new socketIO.Server(server, {
+    cors: {
+        origin: "http://localhost:3000",
+        methods: ["GET", "POST"],
+    },
+});
 
 app.use(express.json());
 app.use(cors());
 
+// Function to hash the password
 function hashPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex');
 }
 
+// Users and their hashed passwords
 let users = {
     'user1': { password: hashPassword('password1') },
     'user2': { password: hashPassword('password2') }
 };
 
-let onlineUsers = {}; // Stores online users' socket IDs
+// Store online users with their socket IDs
+let onlineUsers = {};
+
+// Store chat room IDs for each pair of users
+let chatRooms = {};
+
+// Function to create a unique chat room ID based on usernames
+function getChatRoomId(user1, user2) {
+    return [user1, user2].sort().join('_');
+}
 
 // Signup route
 app.post('/signup', (req, res) => {
@@ -41,58 +57,58 @@ app.post('/login', (req, res) => {
     res.status(200).send('Login successful');
 });
 
-// Endpoint to get the username
-app.get('/api/getUsername', (req, res) => {
-    const loggedInUsername = req.query.loggedInUsername;
-    if (loggedInUsername && users[loggedInUsername]) {
-      res.json({ username: loggedInUsername });
-    } else {
-      res.status(404).send('Username not found');
-    }
-  });
-
-  app.get('/users/:name', (req, res) => {
-    const name = req.params.name;
-    const user = users[name];
-    if (user) {
-      res.json({ name });
-    } else {
-      res.status(404).send('User not found');
-    }
-  });
-
-
 // Socket.IO connection event
 io.on('connection', (socket) => {
-    console.log('New client connected');
+    console.log('New client connected : ${socket.id}');
+    let currentUser;
 
-    // Associate a username with the socket ID
-    socket.on('login', username => {
+    // Login user and set currentUser
+    socket.on('login', (username) => {
+        currentUser = username;
         onlineUsers[username] = socket.id;
-        console.log(`${username} connected with socket ID: ${socket.id}`);
+        console.log(`${username} logged in with socket ID: ${socket.id}`);
     });
 
-    // Handle direct messages
-    socket.on('direct message', ({ toUsername, message }) => {
-        if (onlineUsers[toUsername]) {
-            io.to(onlineUsers[toUsername]).emit('direct message', { message, fromUsername: socket.id });
-            console.log(`Message sent from ${socket.id} to ${toUsername}: ${message}`);
+    // When a user requests to chat with another user
+    socket.on('request chat', (otherUsername) => {
+        if (onlineUsers[otherUsername]) {
+            const chatRoomId = getChatRoomId(currentUser, otherUsername);
+            socket.join(chatRoomId);
+            chatRooms[currentUser] = chatRoomId;
+            chatRooms[otherUsername] = chatRoomId;
+            console.log(`${currentUser} and ${otherUsername} joined chat room: ${chatRoomId}`);
         } else {
-            console.log(`Direct message failed: ${toUsername} not found`);
+            console.log(`Chat request failed: ${otherUsername} not found or not online.`);
         }
     });
 
+    // When a user sends a message to the chat room
+    // socket.on('send message', (messageText) => {
+    //     const chatRoomId = chatRooms[currentUser];
+    //     if (chatRoomId) {
+    //         const message = { text: messageText, fromUsername: currentUser };
+    //         io.to(chatRoomId).emit('receive message', message);
+    //         console.log(`Message from ${currentUser} in room ${chatRoomId}: ${message.text}`);
+    //     }
+    // });
+
+    socket.on('send message', (messageText) => {
+        const chatRoomId = chatRooms[currentUser];
+        if (chatRoomId) {
+          const message = { text: messageText, fromUsername: currentUser };
+          io.in(chatRoomId).emit('receive message', message);
+          console.log(`Message from ${currentUser} in room ${chatRoomId}: ${message.text}`);
+        }
+      });
     // Handle disconnection
     socket.on('disconnect', () => {
-        let disconnectedUser;
-        for (let username in onlineUsers) {
-            if (onlineUsers[username] === socket.id) {
-                disconnectedUser = username;
-                delete onlineUsers[username];
-                break;
-            }
+        if (currentUser && onlineUsers[currentUser]) {
+            delete onlineUsers[currentUser];
+            delete chatRooms[currentUser];
+            console.log(`${currentUser} disconnected`);
+        } else {
+            console.log('A user disconnected');
         }
-        console.log(`${disconnectedUser || 'A user'} disconnected`);
     });
 });
 
